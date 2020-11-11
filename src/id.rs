@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use core::fmt;
 
 #[derive(Eq, PartialEq)]
 pub struct StandardId(u16);
@@ -85,11 +86,26 @@ impl PartialOrd for FrameId {
         Some(self.cmp(other))
     }
 }
+impl Debug for FrameId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "FrameId(");
+        match self {
+            FrameId::Standard(sid) => {
+                write!(f, "{:05x}", sid.0);
+            },
+            FrameId::Extended(eid) => {
+                write!(f, "{:#010x}", eid.0);
+            }
+        }
+        write!(f, ")")
+    }
+}
 
 #[cfg(test)]
 extern crate std;
 #[cfg(test)]
 use std::prelude::*;
+use core::fmt::{Debug, Formatter};
 
 #[cfg(test)]
 mod tests {
