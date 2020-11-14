@@ -3,8 +3,10 @@
 pub mod id;
 pub use id::FrameId;
 use core::cmp::{Ord, PartialOrd, Ordering};
+use core::fmt;
 
 use heapless::binary_heap::{BinaryHeap, Min};
+use core::fmt::Formatter;
 
 #[derive(Debug)]
 pub enum Error {
@@ -40,6 +42,11 @@ impl Ord for Frame {
         }
     }
 }
+impl fmt::Debug for Frame {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Frame({:-?}, [{}]", self.id, self.len)
+    }
+}
 
 pub struct FramePool {
     seq: i16
@@ -55,7 +62,7 @@ impl FramePool {
             return Err(Error::WrongLength);
         }
         let mut data_copy = [0u8; 8];
-        data_copy.copy_from_slice(data);
+        data_copy[0..data.len()].copy_from_slice(data);
         self.seq.wrapping_add(1);
         Ok(Frame{
             id,
@@ -79,3 +86,14 @@ impl<N: heapless::ArrayLength<Frame>> FrameHeap<N> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_heap() {
+        let mut heap = FrameHeap::<heapless::consts::U32>::new();
+        let r = heap.heap.push(heap.pool.new_frame(FrameId::standard(123).unwrap(), &[0, 1]).unwrap());
+        assert!(r.is_ok());
+    }
+}

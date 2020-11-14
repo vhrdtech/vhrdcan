@@ -1,7 +1,7 @@
 use core::cmp::Ordering;
 use core::fmt;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub struct StandardId(u16);
 impl StandardId {
     pub fn new(standard_id: u16) -> Option<StandardId> {
@@ -12,12 +12,16 @@ impl StandardId {
         }
     }
 
+    pub fn id(&self) -> u16 {
+        self.0
+    }
+
     pub unsafe fn new_unchecked(standard_id: u16) -> StandardId {
         StandardId(standard_id)
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub struct ExtendedId(u32);
 impl ExtendedId {
     pub fn new(extended_id: u32) -> Option<ExtendedId> {
@@ -28,22 +32,26 @@ impl ExtendedId {
         }
     }
 
+    pub fn id(&self) -> u32 {
+        self.0
+    }
+
     pub unsafe fn new_unchecked(extended_id: u32) -> ExtendedId {
         ExtendedId(extended_id)
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub enum FrameId {
     Standard(StandardId),
     Extended(ExtendedId)
 }
 impl FrameId {
-    pub fn standard(standard_id: u16) -> Option<FrameId> {
+    pub fn new_standard(standard_id: u16) -> Option<FrameId> {
         StandardId::new(standard_id).map(|id| FrameId::Standard(id))
     }
 
-    pub fn extended(extended_id: u32) -> Option<FrameId> {
+    pub fn new_extended(extended_id: u32) -> Option<FrameId> {
         ExtendedId::new(extended_id).map(|id| FrameId::Extended(id))
     }
 }
@@ -88,16 +96,22 @@ impl PartialOrd for FrameId {
 }
 impl Debug for FrameId {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "FrameId(");
+        if !f.sign_minus() {
+            write!(f, "FrameId(");
+        }
         match self {
             FrameId::Standard(sid) => {
-                write!(f, "{:05x}", sid.0);
+                write!(f, "{:#05X}", sid.0);
             },
             FrameId::Extended(eid) => {
-                write!(f, "{:#010x}", eid.0);
+                write!(f, "{:#010X}", eid.0);
             }
         }
-        write!(f, ")")
+        if !f.sign_minus() {
+            write!(f, ")")
+        } else {
+            write!(f, "")
+        }
     }
 }
 
@@ -121,11 +135,11 @@ mod tests {
         assert!(eid.is_some());
         let eid = ExtendedId::new(0x20000000);
         assert!(eid.is_none());
-        let sid0 = FrameId::standard(0).unwrap();
-        let sid7 = FrameId::standard(7).unwrap();
+        let sid0 = FrameId::new_standard(0).unwrap();
+        let sid7 = FrameId::new_standard(7).unwrap();
         assert_eq!(sid0 < sid7, true);
-        let eid0 = FrameId::extended(0).unwrap();
-        let eid7 = FrameId::extended(7).unwrap();
+        let eid0 = FrameId::new_extended(0).unwrap();
+        let eid7 = FrameId::new_extended(7).unwrap();
         assert_eq!(sid0 != eid0, true);
         assert_eq!(eid0 < eid7, true);
         assert_eq!(sid0 < eid0, true);
