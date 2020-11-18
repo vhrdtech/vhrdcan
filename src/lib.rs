@@ -21,7 +21,15 @@ pub struct Frame {
     seq: i16
 }
 impl Frame {
-
+    pub fn id(&self) -> FrameId {
+        self.id
+    }
+    pub fn len(&self) -> usize {
+        self.len as usize
+    }
+    pub fn data(&self) -> &[u8] {
+        &self.data[..self.len as usize]
+    }
 }
 impl PartialOrd for Frame {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
