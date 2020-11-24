@@ -18,7 +18,7 @@ pub enum FrameOrdering {
     NewerFirst
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Frame {
     id: FrameId,
     data: [u8; 8],
