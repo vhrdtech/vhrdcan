@@ -13,6 +13,11 @@ pub enum Error {
     WrongLength
 }
 
+pub enum FrameOrdering {
+    OlderFirst,
+    NewerFirst
+}
+
 #[derive(Eq, PartialEq)]
 pub struct Frame {
     id: FrameId,
@@ -56,6 +61,10 @@ impl fmt::Debug for Frame {
     }
 }
 
+// pub trait FramePool {
+//     type TargetFrame =
+// }
+
 pub struct FramePool {
     seq: i16
 }
@@ -66,7 +75,7 @@ impl FramePool {
         }
     }
     pub fn new_frame(&mut self, id: FrameId, data: &[u8]) -> Result<Frame, Error> {
-        if data.len() >= 8 {
+        if data.len() > 8 {
             return Err(Error::WrongLength);
         }
         let mut data_copy = [0u8; 8];
