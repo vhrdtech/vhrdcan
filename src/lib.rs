@@ -18,6 +18,22 @@ pub enum FrameOrdering {
     NewerFirst
 }
 
+// pub struct RawFrameRef<'a> {
+//     pub id: FrameId,
+//     pub data: &'a [u8]
+// }
+
+pub struct RawFrame {
+    pub id: FrameId,
+    pub data: [u8; 8],
+    pub len: u8
+}
+impl RawFrame {
+    pub fn data(&self) -> &[u8] {
+        &self.data[..self.len as usize]
+    }
+}
+
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Frame {
     id: FrameId,
