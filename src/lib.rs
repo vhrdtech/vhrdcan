@@ -51,6 +51,9 @@ impl Frame {
     pub fn data(&self) -> &[u8] {
         &self.data[..self.len as usize]
     }
+    pub fn sequence_number(&self) -> u16 {
+        self.seq as u16
+    }
 }
 impl PartialOrd for Frame {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -96,7 +99,7 @@ impl FramePool {
         }
         let mut data_copy = [0u8; 8];
         data_copy[0..data.len()].copy_from_slice(data);
-        self.seq.wrapping_add(1);
+        self.seq = self.seq.wrapping_add(1);
         Ok(Frame{
             id,
             data: data_copy,
