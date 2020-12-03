@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 heapless = "0.5.6"
+hash32 = "0.1"
+hash32-derive = "0.1"

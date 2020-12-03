@@ -1,7 +1,7 @@
 use core::cmp::Ordering;
 use core::fmt;
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct StandardId(u16);
 impl StandardId {
     pub fn new(standard_id: u16) -> Option<StandardId> {
@@ -21,7 +21,7 @@ impl StandardId {
     }
 }
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct ExtendedId(u32);
 impl ExtendedId {
     pub fn new(extended_id: u32) -> Option<ExtendedId> {
@@ -41,7 +41,7 @@ impl ExtendedId {
     }
 }
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub enum FrameId {
     Standard(StandardId),
     Extended(ExtendedId)
@@ -97,20 +97,32 @@ impl PartialOrd for FrameId {
 impl Debug for FrameId {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         if !f.sign_minus() {
-            write!(f, "FrameId(");
+            let _ = write!(f, "FrameId(");
         }
         match self {
             FrameId::Standard(sid) => {
-                write!(f, "{:#05X}", sid.0);
+                let _ = write!(f, "{:#05X}", sid.0);
             },
             FrameId::Extended(eid) => {
-                write!(f, "{:#010X}", eid.0);
+                let _ = write!(f, "{:#010X}", eid.0);
             }
         }
         if !f.sign_minus() {
             write!(f, ")")
         } else {
             write!(f, "")
+        }
+    }
+}
+impl hash32::Hash for FrameId {
+    fn hash<H: hash32::Hasher>(&self, state: &mut H) {
+        match *self {
+            FrameId::Standard(sid) => {
+                state.write(unsafe { core::slice::from_raw_parts(&sid.0 as *const _ as *const u8, 2) })
+            }
+            FrameId::Extended(eid) => {
+                state.write(unsafe { core::slice::from_raw_parts(&eid.0 as *const _ as *const u8, 4) })
+            }
         }
     }
 }
