@@ -8,6 +8,8 @@ use core::fmt;
 use heapless::binary_heap::{BinaryHeap, Min};
 use core::fmt::Formatter;
 
+pub use heapless;
+
 #[derive(Debug)]
 pub enum Error {
     WrongLength
@@ -18,10 +20,10 @@ pub enum FrameOrdering {
     NewerFirst
 }
 
-// pub struct RawFrameRef<'a> {
-//     pub id: FrameId,
-//     pub data: &'a [u8]
-// }
+pub struct RawFrameRef<'a> {
+    pub id: FrameId,
+    pub data: &'a [u8]
+}
 
 pub struct RawFrame {
     pub id: FrameId,
@@ -54,7 +56,14 @@ impl Frame {
     pub fn sequence_number(&self) -> u16 {
         self.seq as u16
     }
+    pub fn as_raw_frame_ref(&self) -> RawFrameRef {
+        RawFrameRef {
+            id: self.id,
+            data: self.data()
+        }
+    }
 }
+
 impl PartialOrd for Frame {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
