@@ -4,7 +4,7 @@ use core::fmt;
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct StandardId(u16);
 impl StandardId {
-    pub fn new(standard_id: u16) -> Option<StandardId> {
+    pub const fn new(standard_id: u16) -> Option<StandardId> {
         if standard_id & (0b0001_1111 << 11) != 0 {
             None
         } else {
@@ -24,7 +24,7 @@ impl StandardId {
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct ExtendedId(u32);
 impl ExtendedId {
-    pub fn new(extended_id: u32) -> Option<ExtendedId> {
+    pub const fn new(extended_id: u32) -> Option<ExtendedId> {
         if extended_id & (0b111 << 29) != 0 {
             None
         } else {
@@ -47,12 +47,22 @@ pub enum FrameId {
     Extended(ExtendedId)
 }
 impl FrameId {
-    pub fn new_standard(standard_id: u16) -> Option<FrameId> {
-        StandardId::new(standard_id).map(|id| FrameId::Standard(id))
+    pub const fn new_standard(standard_id: u16) -> Option<FrameId> {
+        match StandardId::new(standard_id) {
+            Some(id) => {
+                Some(FrameId::Standard(id))
+            },
+            None => None
+        }
     }
 
-    pub fn new_extended(extended_id: u32) -> Option<FrameId> {
-        ExtendedId::new(extended_id).map(|id| FrameId::Extended(id))
+    pub const fn new_extended(extended_id: u32) -> Option<FrameId> {
+        match ExtendedId::new(extended_id) {
+            Some(id) => {
+                Some(FrameId::Extended(id))
+            },
+            None => None
+        }
     }
 }
 impl Ord for FrameId {
