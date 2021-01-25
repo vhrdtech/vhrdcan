@@ -35,6 +35,11 @@ impl RawFrame {
         &self.data[..self.len as usize]
     }
 }
+impl fmt::Debug for RawFrame {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} [{}]={:?}", self.id, self.len, self.data)
+    }
+}
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Frame {
@@ -85,7 +90,15 @@ impl Ord for Frame {
 }
 impl fmt::Debug for Frame {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Frame({:-?}, [{}]", self.id, self.len)
+        let len = self.len as usize;
+        write!(f, "Frame({:-?}, {}, ", self.id, len).ok();
+        for i in 0..len {
+            write!(f, "{:02x}", self.data[i]).ok();
+            if i != len - 1 {
+                write!(f, " ").ok();
+            }
+        }
+        write!(f, ")")
     }
 }
 
@@ -116,6 +129,18 @@ impl FramePool {
             seq: self.seq
         })
     }
+    pub fn new_frame_from_raw(&mut self, raw_frame: RawFrame) -> Result<Frame, Error> {
+        if raw_frame.len > 8 {
+            return Err(Error::WrongLength);
+        }
+        self.seq = self.seq.wrapping_add(1);
+        Ok(Frame {
+            id: raw_frame.id,
+            data: raw_frame.data,
+            len: raw_frame.len,
+            seq: self.seq
+        })
+    }
 }
 
 pub struct FrameHeap<N: heapless::ArrayLength<Frame>> {
@@ -130,6 +155,9 @@ impl<N: heapless::ArrayLength<Frame>> FrameHeap<N> {
         }
     }
 }
+
+pub const EXTENDED_ID_ALL_BITS: u32 = 0x1FFFFFFF;
+pub const STANDARD_ID_ALL_BITS: u16 = 0x7FF;
 
 #[cfg(test)]
 mod tests {
