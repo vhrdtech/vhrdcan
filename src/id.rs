@@ -1,7 +1,7 @@
 use core::cmp::Ordering;
 use core::fmt;
 
-#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct StandardId(u16);
 impl StandardId {
     pub const fn new(standard_id: u16) -> Option<StandardId> {
@@ -21,7 +21,7 @@ impl StandardId {
     }
 }
 
-#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct ExtendedId(u32);
 impl ExtendedId {
     pub const fn new(extended_id: u32) -> Option<ExtendedId> {
