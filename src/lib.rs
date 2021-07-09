@@ -10,6 +10,9 @@ use core::fmt::Formatter;
 
 pub use heapless;
 
+#[cfg(feature = "serialization")]
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug)]
 pub enum Error {
     WrongLength
@@ -24,7 +27,22 @@ pub struct RawFrameRef<'a> {
     pub id: FrameId,
     pub data: &'a [u8]
 }
+impl<'a> fmt::Debug for RawFrameRef<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let len = self.data.len();
+        write!(f, "({:-?}, {}, ", self.id, len).ok();
+        for i in 0..len {
+            write!(f, "{:02x}", self.data[i]).ok();
+            if i != len - 1 {
+                write!(f, " ").ok();
+            }
+        }
+        write!(f, ")")
+    }
+}
 
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 pub struct RawFrame {
     pub id: FrameId,
     pub data: [u8; 8],
@@ -34,14 +52,22 @@ impl RawFrame {
     pub fn data(&self) -> &[u8] {
         &self.data[..self.len as usize]
     }
+
+    pub fn as_raw_frame_ref(&self) -> RawFrameRef {
+        RawFrameRef {
+            id: self.id,
+            data: self.data()
+        }
+    }
 }
 impl fmt::Debug for RawFrame {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?} [{}]={:?}", self.id, self.len, self.data)
+        write!(f, "RawFrame{:?}", self.as_raw_frame_ref())
     }
 }
 
 #[derive(Eq, PartialEq, Copy, Clone)]
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 pub struct Frame {
     id: FrameId,
     data: [u8; 8],
@@ -90,15 +116,7 @@ impl Ord for Frame {
 }
 impl fmt::Debug for Frame {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let len = self.len as usize;
-        write!(f, "Frame({:-?}, {}, ", self.id, len).ok();
-        for i in 0..len {
-            write!(f, "{:02x}", self.data[i]).ok();
-            if i != len - 1 {
-                write!(f, " ").ok();
-            }
-        }
-        write!(f, ")")
+        write!(f, "Frame[{}]{:?}", self.seq, self.as_raw_frame_ref())
     }
 }
 

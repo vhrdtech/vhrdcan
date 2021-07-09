@@ -1,7 +1,10 @@
 use core::cmp::Ordering;
 use core::fmt;
+#[cfg(feature = "serialization")]
+use serde::{Serialize, Deserialize};
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 pub struct StandardId(u16);
 impl StandardId {
     pub const fn new(standard_id: u16) -> Option<StandardId> {
@@ -22,6 +25,7 @@ impl StandardId {
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 pub struct ExtendedId(u32);
 impl ExtendedId {
     pub const fn new(extended_id: u32) -> Option<ExtendedId> {
@@ -42,6 +46,7 @@ impl ExtendedId {
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 pub enum FrameId {
     Standard(StandardId),
     Extended(ExtendedId)
