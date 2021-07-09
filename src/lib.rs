@@ -49,6 +49,19 @@ pub struct RawFrame {
     pub len: u8
 }
 impl RawFrame {
+    pub fn new(id: FrameId, data: &[u8]) -> Option<Self> {
+        if data.len() > 8 {
+            return None;
+        }
+        let mut data_copy = [0u8; 8];
+        data_copy[0..data.len()].copy_from_slice(data);
+        Some(RawFrame {
+            id,
+            data: data_copy,
+            len: data.len() as u8
+        })
+    }
+
     pub fn data(&self) -> &[u8] {
         &self.data[..self.len as usize]
     }
