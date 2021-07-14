@@ -62,6 +62,17 @@ impl RawFrame {
         })
     }
 
+    pub fn new_move(id: FrameId, data: [u8; 8], used: u8) -> Option<RawFrame> {
+        if data.len() > 8 {
+            return None;
+        }
+        Some(RawFrame {
+            id,
+            data,
+            len: used
+        })
+    }
+
     pub fn data(&self) -> &[u8] {
         &self.data[..self.len as usize]
     }
@@ -160,17 +171,14 @@ impl FramePool {
             seq: self.seq
         })
     }
-    pub fn new_frame_from_raw(&mut self, raw_frame: RawFrame) -> Result<Frame, Error> {
-        if raw_frame.len > 8 {
-            return Err(Error::WrongLength);
-        }
+    pub fn new_frame_from_raw(&mut self, raw_frame: RawFrame) -> Frame {
         self.seq = self.seq.wrapping_add(1);
-        Ok(Frame {
+        Frame {
             id: raw_frame.id,
             data: raw_frame.data,
             len: raw_frame.len,
             seq: self.seq
-        })
+        }
     }
 }
 
