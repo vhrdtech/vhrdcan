@@ -29,31 +29,39 @@ impl<'a> fmt::Debug for FrameRef<'a> {
 pub struct Frame<const N: usize> {
     pub id: FrameId,
     pub data: [u8; N],
-    pub len: u16
+    len: u16
 }
 impl<const N: usize> Frame<N> {
     pub fn new(id: FrameId, data: &[u8]) -> Option<Self> {
         if data.len() > N {
             return None;
         }
+        Some(unsafe { Self::new_unchecked(id, data) })
+    }
+
+    pub unsafe fn new_unchecked(id: FrameId, data: &[u8]) -> Self {
         let mut data_copy = [0u8; N];
         data_copy[0..data.len()].copy_from_slice(data);
-        Some(Frame {
+        Frame {
             id,
             data: data_copy,
             len: data.len() as u16
-        })
+        }
     }
 
-    pub fn new_move(id: FrameId, data: [u8; N], used: u8) -> Option<Frame<N>> {
-        if data.len() > 8 {
+    pub fn new_move(id: FrameId, data: [u8; N], used: u16) -> Option<Frame<N>> {
+        if data.len() > N {
             return None;
         }
-        Some(Frame {
+        unsafe { Some(Self::new_move_unchecked(id, data, used)) }
+    }
+
+    pub unsafe fn new_move_unchecked(id: FrameId, data: [u8; N], used: u16) -> Frame<N> {
+        Frame {
             id,
             data,
-            len: used as u16
-        })
+            len: used
+        }
     }
 
     pub fn data(&self) -> &[u8] {

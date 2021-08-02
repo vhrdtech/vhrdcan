@@ -5,6 +5,7 @@ pub mod pool;
 pub mod frame;
 
 pub use id::FrameId;
+pub use frame::{Frame, FrameRef};
 
 pub use heapless;
 
