@@ -15,7 +15,7 @@ impl StandardId {
         }
     }
 
-    pub fn id(&self) -> u16 {
+    pub fn inner(&self) -> u16 {
         self.0
     }
 
@@ -36,7 +36,7 @@ impl ExtendedId {
         }
     }
 
-    pub fn id(&self) -> u32 {
+    pub fn inner(&self) -> u32 {
         self.0
     }
 

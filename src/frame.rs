@@ -28,7 +28,7 @@ impl<'a> fmt::Debug for FrameRef<'a> {
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 pub struct Frame<const N: usize> {
     pub id: FrameId,
-    pub data: [u8; N],
+    data: [u8; N],
     len: u16
 }
 impl<const N: usize> Frame<N> {
