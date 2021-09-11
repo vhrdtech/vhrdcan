@@ -133,10 +133,10 @@ impl hash32::Hash for FrameId {
     fn hash<H: hash32::Hasher>(&self, state: &mut H) {
         match *self {
             FrameId::Standard(sid) => {
-                state.write(unsafe { core::slice::from_raw_parts(&sid.0 as *const _ as *const u8, 2) })
+                state.write(&sid.0.to_le_bytes())
             }
             FrameId::Extended(eid) => {
-                state.write(unsafe { core::slice::from_raw_parts(&eid.0 as *const _ as *const u8, 4) })
+                state.write(&eid.0.to_le_bytes())
             }
         }
     }
