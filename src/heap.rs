@@ -26,7 +26,7 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize> Ord for HeapElement<M, 
                     HeapElement::Filled(other_frame, other_seq, _) => {
                         match self_frame.cmp(other_frame) {
                             Less => { Less }
-                            Equal => { self_seq.cmp(other_seq) }
+                            Equal => { self_seq.wrapping_sub(*other_seq).cmp(&0) }
                             Greater => { Greater }
                         }
                     }
@@ -69,20 +69,39 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize, const N: usize> Heap<M,
 
     pub fn push(&mut self, frame: Frame<MTU>, marker: M) -> Result<usize, Frame<MTU>> {
         let heap_element = HeapElement::Filled(frame, self.seq, marker);
-        for elem in self.data.iter_mut() {
-            if *elem == HeapElement::Hole {
-                *elem = heap_element;
-                break;
+        let mut replaced = 0;
+        if self.len == N {
+            if self.sort_on == SortOn::Push {
+                self.data.sort_unstable();
+                self.hint_idx = 0;
             }
+            match self.data[N - 1] {
+                HeapElement::Filled(stored_frame, _, _) => {
+                    if frame < stored_frame {
+                        self.data[N - 1] = heap_element;
+                        replaced = 1;
+                    } else {
+                        return Err(frame);
+                    }
+                }
+                HeapElement::Hole => unreachable!()
+            }
+        } else {
+            for elem in self.data.iter_mut() {
+                if *elem == HeapElement::Hole {
+                    *elem = heap_element;
+                    break;
+                }
+            }
+            self.len += 1;
         }
-        self.seq = self.seq.wrapping_add(1);
         if self.sort_on == SortOn::Push {
             self.data.sort_unstable();
             self.hint_idx = 0;
         }
-        self.len += 1;
+        self.seq = self.seq.wrapping_add(1);
 
-        Ok(0)
+        Ok(replaced)
     }
 
     pub fn pop(&mut self) -> Option<Frame<MTU>> {
@@ -178,6 +197,31 @@ mod tests {
         assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 1);
         assert_eq!(heap.pop().unwrap().data(), &[7, 8, 9]);
+        assert_eq!(heap.len(), 0);
+        assert_eq!(heap.pop(), None);
+    }
+
+    #[test]
+    fn check_yield() {
+        let mut heap = Heap::<(), 8, 4>::new(SortOn::Push);
+        let lower_prio = Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap();
+        let higher_prio = Frame::new(FrameId::new_extended(0x12).unwrap(), &[4, 5, 6]).unwrap();
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert!(heap.push(lower_prio, ()).is_err());
+        assert_eq!(heap.len(), 4);
+        assert_eq!(heap.push(higher_prio, ()), Ok(1));
+        assert_eq!(heap.len(), 4);
+
+        assert_eq!(heap.pop().unwrap().data(), &[4, 5, 6]);
+        assert_eq!(heap.len(), 3);
+        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.len(), 2);
+        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.len(), 1);
+        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 0);
         assert_eq!(heap.pop(), None);
     }
