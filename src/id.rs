@@ -2,6 +2,7 @@ use core::cmp::Ordering;
 use core::fmt;
 #[cfg(feature = "serialization")]
 use serde::{Serialize, Deserialize};
+use core::fmt::{Debug, Formatter};
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
@@ -78,23 +79,15 @@ impl Ord for FrameId {
                     FrameId::Standard(sid_r) => {
                         sid_l.0.cmp(&sid_r.0)
                     },
-                    FrameId::Extended(eid_r) => {
-                        let eid_r_28_18 = (eid_r.0 >> 18) as u16;
-                        if sid_l.0 == eid_r_28_18 {
-                            return Ordering::Less; // Standard frame wins because of IDE dominant
-                        }
-                        sid_l.0.cmp(&eid_r_28_18)
+                    FrameId::Extended(_) => {
+                        return Ordering::Less; // Standard frame wins because of IDE dominant
                     }
                 }
             },
             FrameId::Extended(eid_l) => {
                 match other {
-                    FrameId::Standard(sid_r) => {
-                        let eid_l_28_18 = (eid_l.0 >> 18) as u16;
-                        if eid_l_28_18 == sid_r.0 {
-                            return Ordering::Greater; // Standard frame wins because of IDE dominant
-                        }
-                        eid_l_28_18.cmp(&sid_r.0)
+                    FrameId::Standard(_) => {
+                        return Ordering::Greater; // Standard frame wins because of IDE dominant
                     },
                     FrameId::Extended(eid_r) => {
                         eid_l.0.cmp(&eid_r.0)
@@ -142,11 +135,10 @@ impl hash32::Hash for FrameId {
     }
 }
 
-#[cfg(test)]
-extern crate std;
-#[cfg(test)]
-use std::prelude::*;
-use core::fmt::{Debug, Formatter};
+// #[cfg(test)]
+// extern crate std;
+// #[cfg(test)]
+// use std::prelude::*;
 
 #[cfg(test)]
 mod tests {
@@ -163,14 +155,17 @@ mod tests {
         let eid = ExtendedId::new(0x20000000);
         assert!(eid.is_none());
         let sid0 = FrameId::new_standard(0).unwrap();
+        let sid1 = FrameId::new_standard(1).unwrap();
         let sid7 = FrameId::new_standard(7).unwrap();
         assert_eq!(sid0 < sid7, true);
         let eid0 = FrameId::new_extended(0).unwrap();
+        let eid1 = FrameId::new_extended(1).unwrap();
         let eid7 = FrameId::new_extended(7).unwrap();
         assert_eq!(sid0 != eid0, true);
         assert_eq!(eid0 < eid7, true);
         assert_eq!(sid0 < eid0, true);
+        assert_eq!(sid1 < eid1, true);
         assert_eq!(eid0 > sid0, true);
-        assert_eq!(sid7 > eid0, true);
+        assert_eq!(sid7 < eid0, true);
     }
 }
