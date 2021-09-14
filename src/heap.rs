@@ -1,13 +1,32 @@
 use crate::Frame;
 use core::cmp::Ordering;
 
-#[derive(Eq, PartialEq, Copy, Clone)]
-enum HeapElement<M: Eq + PartialEq + Copy + Clone, const MTU: usize> {
-    Hole,
-    Filled(Frame<MTU>, i16, M)
+pub trait MarkerTraits: Eq + PartialEq + Copy + Clone {}
+impl<M> MarkerTraits for M where M: Eq + PartialEq + Copy + Clone {
+
 }
 
-impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize> Ord for HeapElement<M, MTU> {
+pub trait GroupTraits: Eq + PartialEq + Copy + Clone {}
+impl<M> GroupTraits for M where M: Eq + PartialEq + Copy + Clone {
+
+}
+
+#[derive(Copy, Clone)]
+pub struct NoGrouping {}
+impl PartialEq<Self> for NoGrouping {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
+}
+impl Eq for NoGrouping {}
+
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum HeapElement<M: MarkerTraits, G: GroupTraits, const MTU: usize> {
+    Hole,
+    Filled(Frame<MTU>, i16, M, G)
+}
+
+impl<M: MarkerTraits, G: GroupTraits, const MTU: usize> Ord for HeapElement<M, G, MTU> {
     fn cmp(&self, other: &Self) -> Ordering {
         use Ordering::*;
         match self {
@@ -16,14 +35,14 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize> Ord for HeapElement<M, 
                     // Hole's priority are equal, no need to move them around
                     HeapElement::Hole => { Equal }
                     // Any filled element priority is higher (less in can bus terminology)
-                    HeapElement::Filled(_, _, _) => { Greater }
+                    HeapElement::Filled(_, _, _, _) => { Greater }
                 }
             }
-            HeapElement::Filled(self_frame, self_seq, _) => {
+            HeapElement::Filled(self_frame, self_seq, _, _) => {
                 match other {
                     // Any filled element priority is higher (less in can bus terminology)
                     HeapElement::Hole => { Less }
-                    HeapElement::Filled(other_frame, other_seq, _) => {
+                    HeapElement::Filled(other_frame, other_seq, _, _) => {
                         match self_frame.cmp(other_frame) {
                             Less => { Less }
                             Equal => { self_seq.wrapping_sub(*other_seq).cmp(&0) }
@@ -36,7 +55,7 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize> Ord for HeapElement<M, 
     }
 }
 
-impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize> PartialOrd for HeapElement<M, MTU> {
+impl<M: MarkerTraits, G: GroupTraits, const MTU: usize> PartialOrd for HeapElement<M, G, MTU> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -48,15 +67,15 @@ pub enum SortOn {
     Pop,
 }
 
-pub struct Heap<M: Eq + PartialEq + Copy + Clone, const MTU: usize, const N: usize> {
-    data: [HeapElement<M, MTU>; N],
+pub struct Heap<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> {
+    data: [HeapElement<M, G, MTU>; N],
     len: usize,
     hint_idx: usize,
     sort_on: SortOn,
     seq: i16,
 }
 
-impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize, const N: usize> Heap<M, MTU, N> {
+impl<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> Heap<M, G, MTU, N> {
     pub fn new(sort_on: SortOn) -> Self {
         Heap {
             data: [HeapElement::Hole; N],
@@ -67,8 +86,7 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize, const N: usize> Heap<M,
         }
     }
 
-    pub fn push(&mut self, frame: Frame<MTU>, marker: M) -> Result<usize, Frame<MTU>> {
-        let heap_element = HeapElement::Filled(frame, self.seq, marker);
+    pub fn push(&mut self, frame: Frame<MTU>, marker: M, group: G) -> Result<usize, Frame<MTU>> {
         let mut replaced = 0;
         if self.len == N {
             if self.sort_on == SortOn::Push {
@@ -76,10 +94,26 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize, const N: usize> Heap<M,
                 self.hint_idx = 0;
             }
             match self.data[N - 1] {
-                HeapElement::Filled(stored_frame, _, _) => {
+                HeapElement::Filled(stored_frame, _, _, _) => {
                     if frame < stored_frame {
-                        self.data[N - 1] = heap_element;
+                        let old_group = match self.data[N - 1] {
+                            HeapElement::Hole => { unreachable!() }
+                            HeapElement::Filled(_, _, _, og) => og
+                        };
+                        self.data[N - 1] = HeapElement::Filled(frame, self.seq, marker, group);
                         replaced = 1;
+
+                        // Remove all frames from the same group as well
+                        for elem in self.data.iter_mut() {
+                            match elem {
+                                HeapElement::Hole => {}
+                                HeapElement::Filled(_, _, _, group) => {
+                                    if old_group == *group {
+                                        *elem = HeapElement::Hole;
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         return Err(frame);
                     }
@@ -89,7 +123,7 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize, const N: usize> Heap<M,
         } else {
             for elem in self.data.iter_mut() {
                 if *elem == HeapElement::Hole {
-                    *elem = heap_element;
+                    *elem = HeapElement::Filled(frame, self.seq, marker, group);
                     break;
                 }
             }
@@ -116,7 +150,7 @@ impl<M: Eq + PartialEq + Copy + Clone, const MTU: usize, const N: usize> Heap<M,
             return None;
         }
         match self.data[self.hint_idx] {
-            HeapElement::Filled(frame, _, _) => {
+            HeapElement::Filled(frame, _, _, _) => {
                 self.data[self.hint_idx] = HeapElement::Hole;
                 self.hint_idx += 1;
                 self.len -= 1;
@@ -145,12 +179,12 @@ mod tests {
 
     #[test]
     fn check_sort_by_seq() {
-        let mut heap = Heap::<(), 8, 32>::new(SortOn::Push);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), ()), Ok(0));
+        let mut heap = Heap::<(), NoGrouping, 8, 32>::new(SortOn::Push);
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), ()), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), ()), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 3);
 
         assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
@@ -161,12 +195,12 @@ mod tests {
         assert_eq!(heap.len(), 0);
         assert_eq!(heap.pop(), None);
 
-        let mut heap = Heap::<(), 8, 32>::new(SortOn::Pop);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), ()), Ok(0));
+        let mut heap = Heap::<(), NoGrouping, 8, 32>::new(SortOn::Pop);
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), ()), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), ()), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 3);
 
         assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
@@ -180,14 +214,14 @@ mod tests {
 
     #[test]
     fn check_sort_by_id_and_seq() {
-        let mut heap = Heap::<(), 8, 32>::new(SortOn::Push);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), ()), Ok(0));
+        let mut heap = Heap::<(), NoGrouping, 8, 32>::new(SortOn::Push);
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x1).unwrap(), &[4, 5, 6]).unwrap(), ()), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x1).unwrap(), &[4, 5, 6]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), ()), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 3);
-        assert_eq!(heap.push(Frame::new(FrameId::new_standard(0x1).unwrap(), &[1, 1]).unwrap(), ()), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_standard(0x1).unwrap(), &[1, 1]).unwrap(), (), NoGrouping{}), Ok(0));
         assert_eq!(heap.len(), 4);
 
         assert_eq!(heap.pop().unwrap().data(), &[1, 1]);
@@ -203,16 +237,16 @@ mod tests {
 
     #[test]
     fn check_yield() {
-        let mut heap = Heap::<(), 8, 4>::new(SortOn::Push);
+        let mut heap = Heap::<(), NoGrouping, 8, 4>::new(SortOn::Push);
         let lower_prio = Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap();
         let higher_prio = Frame::new(FrameId::new_extended(0x12).unwrap(), &[4, 5, 6]).unwrap();
-        assert_eq!(heap.push(lower_prio, ()), Ok(0));
-        assert_eq!(heap.push(lower_prio, ()), Ok(0));
-        assert_eq!(heap.push(lower_prio, ()), Ok(0));
-        assert_eq!(heap.push(lower_prio, ()), Ok(0));
-        assert!(heap.push(lower_prio, ()).is_err());
+        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
+        assert!(heap.push(lower_prio, (), NoGrouping{}).is_err());
         assert_eq!(heap.len(), 4);
-        assert_eq!(heap.push(higher_prio, ()), Ok(1));
+        assert_eq!(heap.push(higher_prio, (), NoGrouping{}), Ok(1));
         assert_eq!(heap.len(), 4);
 
         assert_eq!(heap.pop().unwrap().data(), &[4, 5, 6]);
