@@ -138,7 +138,7 @@ impl<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> Heap<M, 
         Ok(replaced)
     }
 
-    pub fn pop(&mut self) -> Option<Frame<MTU>> {
+    pub fn pop(&mut self) -> Option<(Frame<MTU>, M)> {
         if self.len == 0 {
             return None;
         }
@@ -150,11 +150,11 @@ impl<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> Heap<M, 
             return None;
         }
         match self.data[self.hint_idx] {
-            HeapElement::Filled(frame, _, _, _) => {
+            HeapElement::Filled(frame, _, marker, _) => {
                 self.data[self.hint_idx] = HeapElement::Hole;
                 self.hint_idx += 1;
                 self.len -= 1;
-                Some(frame)
+                Some((frame, marker))
             },
             HeapElement::Hole => None
         }
@@ -172,6 +172,33 @@ impl<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> Heap<M, 
     }
 }
 
+pub struct PlainHeap<M: MarkerTraits, const MTU: usize, const N: usize> {
+    heap: Heap<M, NoGrouping, MTU, N>,
+}
+impl<M: MarkerTraits, const MTU: usize, const N: usize> PlainHeap<M, MTU, N> {
+    pub fn new(sort_on: SortOn) -> Self {
+        PlainHeap {
+            heap: Heap::new(sort_on)
+        }
+    }
+
+    pub fn push(&mut self, frame: Frame<MTU>, marker: M) -> Result<usize, Frame<MTU>> {
+        self.heap.push(frame, marker, NoGrouping{})
+    }
+
+    pub fn pop(&mut self) -> Option<(Frame<MTU>, M)> {
+        self.heap.pop()
+    }
+
+    pub fn clear(&mut self) {
+        self.heap.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.heap.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,83 +206,83 @@ mod tests {
 
     #[test]
     fn check_sort_by_seq() {
-        let mut heap = Heap::<(), NoGrouping, 8, 32>::new(SortOn::Push);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), (), NoGrouping{}), Ok(0));
+        let mut heap = PlainHeap::<(), 8, 32>::new(SortOn::Push);
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 3);
 
-        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.pop().unwrap().data(), &[4, 5, 6]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[4, 5, 6]);
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.pop().unwrap().data(), &[7, 8, 9]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[7, 8, 9]);
         assert_eq!(heap.len(), 0);
         assert_eq!(heap.pop(), None);
 
-        let mut heap = Heap::<(), NoGrouping, 8, 32>::new(SortOn::Pop);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), (), NoGrouping{}), Ok(0));
+        let mut heap = PlainHeap::<(), 8, 32>::new(SortOn::Pop);
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[4, 5, 6]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 3);
 
-        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.pop().unwrap().data(), &[4, 5, 6]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[4, 5, 6]);
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.pop().unwrap().data(), &[7, 8, 9]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[7, 8, 9]);
         assert_eq!(heap.len(), 0);
         assert_eq!(heap.pop(), None);
     }
 
     #[test]
     fn check_sort_by_id_and_seq() {
-        let mut heap = Heap::<(), NoGrouping, 8, 32>::new(SortOn::Push);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), (), NoGrouping{}), Ok(0));
+        let mut heap = PlainHeap::<(), 8, 32>::new(SortOn::Push);
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x1).unwrap(), &[4, 5, 6]).unwrap(), (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x1).unwrap(), &[4, 5, 6]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_extended(0x123).unwrap(), &[7, 8, 9]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 3);
-        assert_eq!(heap.push(Frame::new(FrameId::new_standard(0x1).unwrap(), &[1, 1]).unwrap(), (), NoGrouping{}), Ok(0));
+        assert_eq!(heap.push(Frame::new(FrameId::new_standard(0x1).unwrap(), &[1, 1]).unwrap(), ()), Ok(0));
         assert_eq!(heap.len(), 4);
 
-        assert_eq!(heap.pop().unwrap().data(), &[1, 1]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[1, 1]);
         assert_eq!(heap.len(), 3);
-        assert_eq!(heap.pop().unwrap().data(), &[4, 5, 6]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[4, 5, 6]);
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.pop().unwrap().data(), &[7, 8, 9]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[7, 8, 9]);
         assert_eq!(heap.len(), 0);
         assert_eq!(heap.pop(), None);
     }
 
     #[test]
     fn check_yield() {
-        let mut heap = Heap::<(), NoGrouping, 8, 4>::new(SortOn::Push);
+        let mut heap = PlainHeap::<(), 8, 4>::new(SortOn::Push);
         let lower_prio = Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap();
         let higher_prio = Frame::new(FrameId::new_extended(0x12).unwrap(), &[4, 5, 6]).unwrap();
-        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
-        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
-        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
-        assert_eq!(heap.push(lower_prio, (), NoGrouping{}), Ok(0));
-        assert!(heap.push(lower_prio, (), NoGrouping{}).is_err());
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert_eq!(heap.push(lower_prio, ()), Ok(0));
+        assert!(heap.push(lower_prio, ()).is_err());
         assert_eq!(heap.len(), 4);
-        assert_eq!(heap.push(higher_prio, (), NoGrouping{}), Ok(1));
+        assert_eq!(heap.push(higher_prio, ()), Ok(1));
         assert_eq!(heap.len(), 4);
 
-        assert_eq!(heap.pop().unwrap().data(), &[4, 5, 6]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[4, 5, 6]);
         assert_eq!(heap.len(), 3);
-        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 2);
-        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 1);
-        assert_eq!(heap.pop().unwrap().data(), &[1, 2, 3]);
+        assert_eq!(heap.pop().unwrap().0.data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 0);
         assert_eq!(heap.pop(), None);
     }
