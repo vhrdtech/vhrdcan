@@ -89,10 +89,10 @@ impl<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> Heap<M, 
     pub fn push(&mut self, frame: Frame<MTU>, marker: M, group: G) -> Result<usize, Frame<MTU>> {
         let mut replaced = 0;
         if self.len == N {
-            if self.sort_on == SortOn::Push {
+            // if self.sort_on == SortOn::Push {
                 self.data.sort_unstable();
                 self.hint_idx = 0;
-            }
+            // }
             match self.data[N - 1] {
                 HeapElement::Filled(stored_frame, _, _, _) => {
                     if frame < stored_frame {
@@ -110,6 +110,7 @@ impl<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> Heap<M, 
                                 HeapElement::Filled(_, _, _, group) => {
                                     if old_group == *group {
                                         *elem = HeapElement::Hole;
+                                        replaced += 1;
                                     }
                                 }
                             }
@@ -146,18 +147,32 @@ impl<M: MarkerTraits, G: GroupTraits, const MTU: usize, const N: usize> Heap<M, 
             self.data.sort_unstable();
             self.hint_idx = 0;
         }
-        if self.hint_idx == N {
-            return None;
+        if self.hint_idx >= N {
+            self.hint_idx = 0;
         }
         match self.data[self.hint_idx] {
             HeapElement::Filled(frame, _, marker, _) => {
                 self.data[self.hint_idx] = HeapElement::Hole;
                 self.hint_idx += 1;
                 self.len -= 1;
-                Some((frame, marker))
+                return Some((frame, marker));
             },
-            HeapElement::Hole => None
+            HeapElement::Hole => {
+                for item in self.data.iter_mut() {
+                    self.hint_idx += 1;
+                    match item {
+                        HeapElement::Filled(frame, _, marker, _) => {
+                            let popped = (frame.clone(), marker.clone());
+                            *item = HeapElement::Hole;
+                            self.len -= 1;
+                            return Some(popped);
+                        }
+                        HeapElement::Hole => {}
+                    }
+                }
+            }
         }
+        None
     }
 
     pub fn clear(&mut self) {
@@ -184,6 +199,110 @@ impl<M: MarkerTraits, const MTU: usize, const N: usize> PlainHeap<M, MTU, N> {
 
     pub fn push(&mut self, frame: Frame<MTU>, marker: M) -> Result<usize, Frame<MTU>> {
         self.heap.push(frame, marker, NoGrouping{})
+    }
+
+    pub fn pop(&mut self) -> Option<(Frame<MTU>, M)> {
+        self.heap.pop()
+    }
+
+    pub fn clear(&mut self) {
+        self.heap.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.heap.len()
+    }
+}
+
+pub struct GroupingHeap<M: MarkerTraits, const MTU: usize, const N: usize> {
+    heap: Heap<M, u16, MTU, N>,
+    group_seq: u16,
+}
+impl<M: MarkerTraits, const MTU: usize, const N: usize> GroupingHeap<M, MTU, N> {
+    pub fn new(sort_on: SortOn) -> Self {
+        GroupingHeap {
+            heap: Heap::new(sort_on),
+            group_seq: 0,
+        }
+    }
+
+    pub fn push(&mut self, frame: Frame<MTU>, marker: M) -> Result<usize, Frame<MTU>> {
+        self.group_seq = self.group_seq.wrapping_add(1);
+        self.heap.push(frame, marker, self.group_seq)
+    }
+
+    pub fn push_group(
+        &mut self,
+        mut frames: impl Iterator<Item = (Frame<MTU>, M)> + ExactSizeIterator
+    ) -> Result<usize, ()> {
+        if frames.len() == 0 {
+            return Ok(0);
+        }
+        let frame0 = frames.next().unwrap();
+        let mut removed_items = 0;
+        if N - self.heap.len() < frames.len() {
+            self.heap.data.sort_unstable();
+            self.heap.hint_idx = 0;
+            // frames.len = 3
+            // data for example is:
+            // 0 1 2 3 4 5 6 7 8 9
+            // h h h h m m l l l -
+            // look at N-3   |
+            // if lower, remove same group to the left and everything till the end
+            let new_group_start = N - frames.len();
+            match self.heap.data[new_group_start] {
+                HeapElement::Filled(maybe_lower_priority, _, _, group) => {
+                    if frame0.0 < maybe_lower_priority {
+                        let mut i = new_group_start;
+                        loop {
+                            self.heap.data[i] = HeapElement::Hole;
+                            removed_items += 1;
+                            self.heap.len -= 1;
+                            i = if i > 0 {
+                                i - 1
+                            } else {
+                                break
+                            };
+                            match self.heap.data[i] {
+                                HeapElement::Filled(_, _, _, other_group) => {
+                                    if other_group != group {
+                                        break;
+                                    }
+                                }
+                                HeapElement::Hole => unreachable!()
+                            }
+                            for i in i..N {
+                                self.heap.data[i] = HeapElement::Hole;
+                                self.heap.len -= 1;
+                            }
+                        }
+                    } else {
+                        // will not fit
+                        return Err(());
+                    }
+                }
+                HeapElement::Hole => {
+                    unreachable!();
+                }
+            }
+        }
+        self.group_seq = self.group_seq.wrapping_add(1);
+        let mut i = N - 1;
+        self.heap.data[i] = HeapElement::Filled(frame0.0, self.heap.seq, frame0.1, self.group_seq);
+        self.heap.seq = self.heap.seq.wrapping_add(1);
+        self.heap.len += 1;
+        for frame in frames {
+            self.heap.data[i] = HeapElement::Filled(frame.0, self.heap.seq, frame.1, self.group_seq);
+            self.heap.seq = self.heap.seq.wrapping_add(1);
+            self.heap.len += 1;
+            i -= 1;
+        }
+        if self.heap.sort_on == SortOn::Push {
+            self.heap.data.sort_unstable();
+            self.heap.hint_idx = 0;
+        }
+
+        Ok(removed_items)
     }
 
     pub fn pop(&mut self) -> Option<(Frame<MTU>, M)> {
@@ -285,5 +404,12 @@ mod tests {
         assert_eq!(heap.pop().unwrap().0.data(), &[1, 2, 3]);
         assert_eq!(heap.len(), 0);
         assert_eq!(heap.pop(), None);
+    }
+
+    #[test]
+    fn check_grouping() {
+        let mut heap = GroupingHeap::<(), 8, 4>::new(SortOn::Push);
+        let group1 = &mut [(Frame::new(FrameId::new_extended(0x123).unwrap(), &[1, 2, 3]).unwrap(), ())];
+        heap.push_group(group1);
     }
 }
